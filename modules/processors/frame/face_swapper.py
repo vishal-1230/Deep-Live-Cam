@@ -56,6 +56,8 @@ def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
                 temp_frame = swap_face(source_face, target_face, temp_frame)
     else:
         target_face = get_one_face(temp_frame)
+        print("Source Face Type:", type(source_face))
+        print("Target Face Type:", type(target_face))
         if target_face:
             temp_frame = swap_face(source_face, target_face, temp_frame)
     return temp_frame

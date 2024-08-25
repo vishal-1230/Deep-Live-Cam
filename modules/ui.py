@@ -341,12 +341,36 @@ def webcam_preview():
     cap.release()
     PREVIEW.withdraw()
 
+def extract_face_from_source(source_image, frame):
+    # Assuming `source_image` is an instance of the `Face` class
+    if source_image is None:
+        return None
+
+    # Extract the bounding box coordinates
+    x1, y1, x2, y2 = map(int, source_image.bbox)
+
+    # Extract the face from the frame using the bounding box
+    face_image = frame[y1:y2, x1:x2]
+
+    return face_image
 
 def send_frame_to_gcp(frame, source_image):
     # Prepare the data for sending (you may need to adjust this based on your API's requirements)
     _, img_encoded = cv2.imencode('.jpg', frame)
-    source_encoded = cv2.imencode('.jpg', source_image)[1].tobytes() if source_image is not None else None
+    print("Source image type:", type(source_image))
+    print("Source image content:", source_image)
+    if source_image is None and modules.globals.source_path:
+        source_image = get_one_face(cv2.imread(modules.globals.source_path))
+    # source_encoded = cv2.imencode('.jpg', source_image)[1].tobytes() if source_image is not None else None
 
+    # Extract the face image from the source_image
+    face_image = extract_face_from_source(source_image, frame)
+
+    # Encode the extracted face image if it exists
+    if face_image is not None:
+        source_encoded = cv2.imencode('.jpg', face_image)[1].tobytes()
+    else:
+        source_encoded = None
     # Send the frame to the GCP server
     response = requests.post(
         'http://localhost:8000/process',  # Replace with your GCP server's IP and port
