@@ -169,11 +169,40 @@ def update_status(message: str, scope: str = 'DLC.CORE') -> None:
     if not modules.globals.headless:
         ui.update_status(message)
 
+import requests
+import cv2
+import numpy as np
+
+def process_frame_remotely(source_image, frame):
+    # This function sends the frame and the source image to the GCP server
+    _, img_encoded = cv2.imencode('.jpg', frame)
+    source_encoded = cv2.imencode('.jpg', source_image)[1].tobytes() if source_image is not None else None
+
+    response = requests.post(
+        'http://<GCP_INSTANCE_IP>:<PORT>/process',  # Replace with your GCP server's IP and port
+        files={
+            'frame': img_encoded.tobytes(),
+            'source_image': source_encoded
+        }
+    )
+
+    img_np = np.frombuffer(response.content, np.uint8)
+    processed_frame = cv2.imdecode(img_np, cv2.IMREAD_COLOR)
+
+    return processed_frame
+
+
 def start() -> None:
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         if not frame_processor.pre_start():
             return
     update_status('Processing...')
+
+    if modules.globals.use_remote_processing:  # Add a flag to toggle between local and remote processing
+        process_function = process_frame_remotely
+    else:
+        process_function = frame_processor.process_frame
+
     # process image to image
     if has_image_extension(modules.globals.target_path):
         if modules.globals.nsfw_filter and ui.check_and_ignore_nsfw(modules.globals.target_path, destroy):
@@ -182,27 +211,42 @@ def start() -> None:
             shutil.copy2(modules.globals.target_path, modules.globals.output_path)
         except Exception as e:
             print("Error copying file:", str(e))
-        for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
-            update_status('Progressing...', frame_processor.NAME)
-            frame_processor.process_image(modules.globals.source_path, modules.globals.output_path, modules.globals.output_path)
-            release_resources()
+
+        temp_frame = cv2.imread(modules.globals.target_path)
+        source_image = cv2.imread(modules.globals.source_path) if modules.globals.source_path else None
+        processed_frame = process_function(source_image, temp_frame)
+
+        # Save the processed frame
+        cv2.imwrite(modules.globals.output_path, processed_frame)
+        release_resources()
+
         if is_image(modules.globals.target_path):
             update_status('Processing to image succeed!')
         else:
             update_status('Processing to image failed!')
         return
+
     # process image to videos
     if modules.globals.nsfw_filter and ui.check_and_ignore_nsfw(modules.globals.target_path, destroy):
         return
+
     update_status('Creating temp resources...')
     create_temp(modules.globals.target_path)
     update_status('Extracting frames...')
     extract_frames(modules.globals.target_path)
     temp_frame_paths = get_temp_frame_paths(modules.globals.target_path)
+
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         update_status('Progressing...', frame_processor.NAME)
-        frame_processor.process_video(modules.globals.source_path, temp_frame_paths)
+
+        for frame_path in temp_frame_paths:
+            temp_frame = cv2.imread(frame_path)
+            source_image = cv2.imread(modules.globals.source_path) if modules.globals.source_path else None
+            processed_frame = process_function(source_image, temp_frame)
+            cv2.imwrite(frame_path, processed_frame)
+
         release_resources()
+
     # handles fps
     if modules.globals.keep_fps:
         update_status('Detecting fps...')
@@ -212,6 +256,7 @@ def start() -> None:
     else:
         update_status('Creating video with 30.0 fps...')
         create_video(modules.globals.target_path)
+
     # handle audio
     if modules.globals.keep_audio:
         if modules.globals.keep_fps:
@@ -221,13 +266,14 @@ def start() -> None:
         restore_audio(modules.globals.target_path, modules.globals.output_path)
     else:
         move_temp(modules.globals.target_path, modules.globals.output_path)
+
     # clean and validate
     clean_temp(modules.globals.target_path)
     if is_video(modules.globals.target_path):
         update_status('Processing to video succeed!')
     else:
         update_status('Processing to video failed!')
-
+    return
 
 def destroy(to_quit=True) -> None:
     if modules.globals.target_path:

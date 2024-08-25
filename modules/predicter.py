@@ -2,7 +2,7 @@ import numpy
 import opennsfw2
 from PIL import Image
 
-from modules.typing import Frame
+from modules.custom_typing import Frame
 
 MAX_PROBABILITY = 0.85
 

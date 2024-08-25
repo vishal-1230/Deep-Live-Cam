@@ -7,7 +7,7 @@ import modules.globals
 import modules.processors.frame.core
 from modules.core import update_status
 from modules.face_analyser import get_one_face, get_many_faces
-from modules.typing import Face, Frame
+from modules.custom_typing import Face, Frame
 from modules.utilities import conditional_download, resolve_relative_path, is_image, is_video
 
 FACE_SWAPPER = None

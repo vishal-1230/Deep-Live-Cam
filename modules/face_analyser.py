@@ -2,7 +2,7 @@ from typing import Any
 import insightface
 
 import modules.globals
-from modules.typing import Frame
+from modules.custom_typing import Frame
 
 FACE_ANALYSER = None
 

@@ -1,10 +1,18 @@
-from flask import Flask, request, jsonify
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from flask import Flask, request
 from flask_cors import CORS
 import cv2
 import numpy as np
 from modules.processors.frame.face_swapper import process_frame  # Ensure you adapt this for your server environment
 
+
 app = Flask(__name__)
+
+# Allow CORS requests
+CORS(app)
 
 
 @app.route('/process', methods=['POST'])

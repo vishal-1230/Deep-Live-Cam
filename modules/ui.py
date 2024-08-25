@@ -349,7 +349,7 @@ def send_frame_to_gcp(frame, source_image):
 
     # Send the frame to the GCP server
     response = requests.post(
-        'http://34.87.95.43:8000/process',  # Replace with your GCP server's IP and port
+        'http://localhost:8000/process',  # Replace with your GCP server's IP and port
         files={
             'frame': img_encoded.tobytes(),
             'source_image': source_encoded
