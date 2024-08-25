@@ -20,8 +20,13 @@ def process():
     frame_data = request.files['frame'].read()
     frame = cv2.imdecode(np.frombuffer(frame_data, np.uint8), cv2.IMREAD_COLOR)
 
-    source_image_data = request.files.get('source_image')
-    source_image = cv2.imdecode(np.frombuffer(source_image_data, np.uint8), cv2.IMREAD_COLOR) if source_image_data else None
+    source_image_file = request.files.get('source_image')
+    if source_image_file:
+        source_image_data = source_image_file.read()
+        source_image = cv2.imdecode(np.frombuffer(source_image_data, np.uint8), cv2.IMREAD_COLOR)
+    else:
+        source_image = None
+    # source_image = cv2.imdecode(np.frombuffer(source_image_data, np.uint8), cv2.IMREAD_COLOR) if source_image_data else None
 
     # Process the frame (use your existing face swap logic)
     processed_frame = process_frame(source_image, frame)
