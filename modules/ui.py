@@ -283,6 +283,19 @@ def update_preview(frame_number: int = 0) -> None:
         update_status('Processing succeed!')
         PREVIEW.deiconify()
 
+import requests
+import numpy as np
+
+# def send_frame_to_gcp(frame):
+#     # Convert the frame to JPEG format
+#     _, img_encoded = cv2.imencode('.jpg', frame)
+#     response = requests.post('http://34.87.95.43:8000/process', data=img_encoded.tobytes())
+#     # Convert the response back to an image
+#     img_np = np.frombuffer(response.content, np.uint8)
+#     processed_frame = cv2.imdecode(img_np, cv2.IMREAD_COLOR)
+#     return processed_frame
+
+
 def webcam_preview():
     if modules.globals.source_path is None:
         # No image selected
@@ -290,21 +303,21 @@ def webcam_preview():
 
     global preview_label, PREVIEW
 
-    camera = cv2.VideoCapture(0)                                    # Use index for the webcam (adjust the index accordingly if necessary)    
-    camera.set(cv2.CAP_PROP_FRAME_WIDTH, PREVIEW_DEFAULT_WIDTH)     # Set the width of the resolution
-    camera.set(cv2.CAP_PROP_FRAME_HEIGHT, PREVIEW_DEFAULT_HEIGHT)   # Set the height of the resolution
-    camera.set(cv2.CAP_PROP_FPS, 60)                                # Set the frame rate of the webcam
+    cap = cv2.VideoCapture(0)  # Use index for the webcam (adjust the index accordingly if necessary)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 960)  # Set the width of the resolution
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 540)  # Set the height of the resolution
+    cap.set(cv2.CAP_PROP_FPS, 60)  # Set the frame rate of the webcam
+    PREVIEW_MAX_WIDTH = 960
+    PREVIEW_MAX_HEIGHT = 540
 
-    preview_label.configure(width=PREVIEW_DEFAULT_WIDTH, height=PREVIEW_DEFAULT_HEIGHT)  # Reset the preview image before startup
+    preview_label.configure(image=None)  # Reset the preview image before startup
 
     PREVIEW.deiconify()  # Open preview window
 
-    frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
-
     source_image = None  # Initialize variable for the selected face image
 
-    while camera:
-        ret, frame = camera.read()
+    while True:
+        ret, frame = cap.read()
         if not ret:
             break
 
@@ -312,26 +325,39 @@ def webcam_preview():
         if source_image is None and modules.globals.source_path:
             source_image = get_one_face(cv2.imread(modules.globals.source_path))
 
-        temp_frame = frame.copy()  #Create a copy of the frame
+        temp_frame = frame.copy()  # Create a copy of the frame
 
-        if modules.globals.live_mirror:
-            temp_frame = cv2.flip(temp_frame, 1) # horizontal flipping
+        # Send the frame to the GCP server for processing
+        processed_frame = send_frame_to_gcp(temp_frame, source_image)
 
-        if modules.globals.live_resizable:
-            temp_frame = fit_image_to_size(temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height())
-
-        for frame_processor in frame_processors:
-            temp_frame = frame_processor.process_frame(source_image, temp_frame)
-
-        image = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)  # Convert the image to RGB format to display it with Tkinter
+        image = cv2.cvtColor(processed_frame,
+                             cv2.COLOR_BGR2RGB)  # Convert the image to RGB format to display it with Tkinter
         image = Image.fromarray(image)
-        image = ImageOps.contain(image, (temp_frame.shape[1], temp_frame.shape[0]), Image.LANCZOS)
+        image = ImageOps.contain(image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS)
         image = ctk.CTkImage(image, size=image.size)
         preview_label.configure(image=image)
         ROOT.update()
 
-        if PREVIEW.state() == 'withdrawn':
-            break
+    cap.release()
+    PREVIEW.withdraw()
 
-    camera.release()
-    PREVIEW.withdraw()  # Close preview window when loop is finished
+
+def send_frame_to_gcp(frame, source_image):
+    # Prepare the data for sending (you may need to adjust this based on your API's requirements)
+    _, img_encoded = cv2.imencode('.jpg', frame)
+    source_encoded = cv2.imencode('.jpg', source_image)[1].tobytes() if source_image is not None else None
+
+    # Send the frame to the GCP server
+    response = requests.post(
+        'http://34.87.95.43:8000/process',  # Replace with your GCP server's IP and port
+        files={
+            'frame': img_encoded.tobytes(),
+            'source_image': source_encoded
+        }
+    )
+
+    # Decode the processed image received from the server
+    img_np = np.frombuffer(response.content, np.uint8)
+    processed_frame = cv2.imdecode(img_np, cv2.IMREAD_COLOR)
+
+    return processed_frame
